@@ -1,43 +1,33 @@
-resource "null_resource" "total_iam_removal" {
+resource "null_resource" "api_iam_removal" {
   triggers = {
     member_email = var.member
-    # This forces the script to run even if it "succeeded" before
-    force_run    = timestamp() 
+    force_run    = timestamp()
   }
 
   provisioner "local-exec" {
     command = <<EOT
       set -e
+      # 1. Get the current IAM Policy
+      echo "Fetching current IAM policy..."
+      curl -X POST "https://cloudresourcemanager.googleapis.com/v1/projects/${var.project_id}:getIamPolicy" \
+        -H "Authorization: Bearer $(gcloud auth print-access-token 2>/dev/null || echo $GOOGLE_OAUTH_ACCESS_TOKEN)" \
+        -H "Content-Type: application/json" \
+        -d '{}' > policy.json
 
-      # 1. Download gcloud if it's missing (No sudo needed)
-      if ! command -v gcloud &> /dev/null; then
-        echo "gcloud not found. Downloading CLI..."
-        curl -sSL https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz -o gcloud.tar.gz
-        tar -xf gcloud.tar.gz
-        export PATH=$PATH:$(pwd)/google-cloud-sdk/bin
-      fi
+      # 2. Use python-less manipulation (sed/grep) to strip the user
+      # We create a new policy file excluding the specific member
+      echo "Removing ${var.member} from policy..."
+      sed -i 's/"${var.member}"//g' policy.json
+      sed -i 's/,,/,/g; s/\[,/[/g; s/,]/]/g' policy.json 
 
-      echo "Searching for all roles for ${var.member}..."
+      # 3. Set the new IAM Policy
+      echo "Uploading updated policy..."
+      curl -X POST "https://cloudresourcemanager.googleapis.com/v1/projects/${var.project_id}:setIamPolicy" \
+        -H "Authorization: Bearer $(gcloud auth print-access-token 2>/dev/null || echo $GOOGLE_OAUTH_ACCESS_TOKEN)" \
+        -H "Content-Type: application/json" \
+        -d "{ \"policy\": $(cat policy.json) }"
       
-      # 2. Get all roles for the user
-      ROLES=$(gcloud projects get-iam-policy ${var.project_id} \
-        --flatten="bindings[].members" \
-        --filter="bindings.members:${var.member}" \
-        --format="value(bindings.role)")
-
-      # 3. Loop and remove
-      if [ -z "$ROLES" ]; then
-        echo "No roles found. User is likely already gone."
-      else
-        for role in $ROLES; do
-          echo "Removing: $role"
-          gcloud projects remove-iam-policy-binding ${var.project_id} \
-            --member="${var.member}" \
-            --role="$role" \
-            --quiet
-        done
-        echo "Success: User removed from all roles."
-      fi
+      echo "Success: User removed via API."
     EOT
   }
 }
