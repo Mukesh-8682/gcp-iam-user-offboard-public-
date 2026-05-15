@@ -1,9 +1,18 @@
 variable "project_id" {
-  type        = string
-  description = "The GCP Project ID"
+  type = string
 }
 
-variable "member" {
+variable "members" {
   type        = string
-  description = "The full identity string (e.g., user:someone@gmail.com)"
+  description = "Comma-separated list of users (e.g., user:a@gmail.com,user:b@gmail.com)"
+}
+
+variable "roles" {
+  type        = string
+  description = "Comma-separated list of roles (e.g., roles/viewer,roles/editor)"
+}
+
+variable "is_offboarding" {
+  type    = bool
+  default = false
 }
