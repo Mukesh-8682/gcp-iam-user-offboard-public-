@@ -5,5 +5,5 @@ variable "project_id" {
 
 variable "member" {
   type        = string
-  description = "The user identity (e.g., user:email@example.com)"
+  description = "The full identity string (e.g., user:someone@gmail.com)"
 }

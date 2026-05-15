@@ -1,11 +1,29 @@
-locals {
-  roles_to_remove = [] 
-}
+resource "null_resource" "total_iam_offboard" {
+  # This triggers the script whenever the member email changes
+  triggers = {
+    member_email = var.member
+  }
 
-resource "google_project_iam_member" "user_access" {
-  for_each = toset(local.roles_to_remove)
+  provisioner "local-exec" {
+    command = <<EOT
+      echo "Starting total offboard for ${var.member}..."
+      
+      # Get all roles for this specific user
+      ROLES=$(gcloud projects get-iam-policy ${var.project_id} \
+        --flatten="bindings[].members" \
+        --filter="bindings.members:${var.member}" \
+        --format="value(bindings.role)")
 
-  project = var.project_id
-  member  = var.member
-  role    = each.value   
+      # Loop through and remove each role
+      for role in $ROLES; do
+        echo "Removing role: $role"
+        gcloud projects remove-iam-policy-binding ${var.project_id} \
+          --member="${var.member}" \
+          --role="$role" \
+          --quiet
+      done
+      
+      echo "Offboarding complete."
+    EOT
+  }
 }
