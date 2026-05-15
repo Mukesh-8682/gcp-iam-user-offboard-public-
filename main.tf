@@ -1,14 +1,16 @@
 locals {
-  # 1. Clean up the strings and split them into lists
-  member_list = split(",", replace(var.members, " ", ""))
-  role_list   = split(",", replace(var.roles, " ", ""))
+  # 1. Split the comma strings into lists and strip spaces
+  raw_members = split(",", replace(var.members, " ", ""))
+  raw_roles   = split(",", replace(var.roles, " ", ""))
 
-  # 2. Create a combined list of user/role pairs
-  # Example: [ {user1, role1}, {user1, role2}, {user2, role1}... ]
-  user_role_pairs = setproduct(local.member_list, local.role_list)
+  # 2. Force the "user:" prefix onto every member
+  # This fixes the "invalid value for member" error
+  member_list = [for m in local.raw_members : "user:${replace(m, "user:", "")}"]
 
-  # 3. Create a unique map for the for_each loop
-  # If is_offboarding is true, this map becomes empty {}, deleting everything.
+  # 3. Create combinations
+  user_role_pairs = setproduct(local.member_list, local.raw_roles)
+
+  # 4. The Offboarding Switch
   final_map = var.is_offboarding ? {} : {
     for pair in local.user_role_pairs : "${pair[0]}-${pair[1]}" => {
       member = pair[0]
