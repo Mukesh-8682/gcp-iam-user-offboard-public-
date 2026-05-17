@@ -1,20 +1,17 @@
 locals {
-  # Ensures the mandatory "user:" prefix is cleanly formatted
   clean_member = "user:${replace(var.member, "user:", "")}"
-}
 
-# This resource is authoritative. If a user is not listed in the members array,
-# they are instantly stripped of that role across the entire project.
-resource "google_project_iam_binding" "total_role_cleanup" {
-  for_each = toset([
+  # If offboarding is true, this map becomes empty {}, forcing a clean DESTROY plan
+  final_role_map = var.is_offboarding ? {} : toset([
     "roles/viewer",
     "roles/editor"
   ])
+}
+
+resource "google_project_iam_member" "safe_user_offboard" {
+  for_each = local.final_role_map
 
   project = var.project_id
   role    = each.value
-
-  # Core Logic: If is_offboarding is true, member list is empty [] -> Evicts user.
-  # If false, member list holds the user -> Keeps/tracks user.
-  members = var.is_offboarding ? [] : [local.clean_member]
+  member  = local.clean_member
 }
