@@ -1,29 +1,28 @@
-# 1. Look up the current IAM policy for the project
-data "google_iam_policy" "current_project_policy" {
+# 1. Look up the live IAM policy of the project to find the user's roles automatically
+data "google_project_iam_policy" "live_policy" {
   project = var.project_id
 }
 
 locals {
-  # 2. Extract every role that the specific member currently holds
-  # This replaces the need for a manual 'roles' variable
-  roles_to_manage = [
-    for binding in data.google_iam_policy.current_project_policy.bindings :
-    binding.role if contains(binding.members, "user:${replace(var.member, "user:", "")}")
+  # Clean the input email to ensure it has the mandatory "user:" prefix
+  clean_member = "user:${replace(var.member, "user:", "")}"
+
+  # Search through the live policy and extract every role assigned to this user
+  discovered_roles = [
+    for binding in data.google_project_iam_policy.live_policy.bindings :
+    binding.role if contains(binding.members, local.clean_member)
   ]
 
-  # 3. If offboarding is true, we create an empty map to delete them
-  final_map = var.is_offboarding ? {} : {
-    for role in local.roles_to_manage : role => {
-      member = "user:${replace(var.member, "user:", "")}"
-      role   = role
-    }
+  # If is_offboarding is true, this map becomes empty, triggering total deletion of those roles
+  final_role_map = var.is_offboarding ? {} : {
+    for r in local.discovered_roles : r => r
   }
 }
 
-resource "google_project_iam_member" "auto_user_cleanup" {
-  for_each = local.final_map
+resource "google_project_iam_member" "auto_role_wipeout" {
+  for_each = local.final_role_map
 
   project = var.project_id
-  role    = each.value.role
-  member  = each.value.member
+  role    = each.value
+  member  = local.clean_member
 }
