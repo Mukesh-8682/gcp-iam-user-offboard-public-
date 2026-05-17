@@ -1,9 +1,11 @@
 variable "project_id" {
-  type    = string
+  type        = string
+  description = "The GCP Project ID"
 }
 
-variable "member" {
-  type    = string
+variable "members" {
+  type        = string
+  description = "Comma-separated emails to offboard (e.g., user1@gmail.com, user2@gmail.com)"
 }
 
 variable "is_offboarding" {
