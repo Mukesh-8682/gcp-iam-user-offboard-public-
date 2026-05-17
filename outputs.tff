@@ -1,0 +1,10 @@
+output "offboarded_targets" {
+  value = var.is_offboarding ? [
+    # If offboarding is true, we parse what would have been evaluated during the discovery phase
+    for key, item in local.final_role_map : "WIPED: ${item.member} from ${item.role}"
+  ] : [
+    # If offboarding is false, show what we are currently tracking/managing
+    for key, item in local.final_role_map : "TRACKING: ${item.member} -> ${item.role}"
+  ]
+  description = "The list of users and their corresponding GCP roles processed by this run."
+}
