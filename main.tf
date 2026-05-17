@@ -1,11 +1,11 @@
 locals {
   clean_member = "user:${replace(var.member, "user:", "")}"
 
-  # If offboarding is true, this map becomes empty {}, forcing a clean DESTROY plan
-  final_role_map = var.is_offboarding ? {} : toset([
-    "roles/viewer",
-    "roles/editor"
-  ])
+  # Both sides of the condition now return a clean map structure
+  final_role_map = var.is_offboarding ? {} : {
+    "roles/viewer" : "roles/viewer",
+    "roles/editor" : "roles/editor"
+  }
 }
 
 resource "google_project_iam_member" "safe_user_offboard" {
