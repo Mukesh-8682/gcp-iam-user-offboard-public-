@@ -1,25 +1,30 @@
+# 1. Fetch the live, current IAM policy from the GCP project
+data "google_project_iam_policy" "live_project_policy" {
+  project = var.project_id
+}
+
 locals {
-  # 1. Strip out any unintended empty spaces and break the string by commas
+  # 2. Clean and parse the input string of comma-separated members
   raw_member_list = split(",", replace(var.members, " ", ""))
+  target_members  = [for m in local.raw_member_list : "user:${replace(m, "user:", "")}"]
+
+  # 3. Read the live policy data string from GCP and decode it to find actual bindings
+  # This creates a flat list of actual user-to-role mappings that exist on the cloud right now
+  live_policy_json = jsondecode(data.google_project_iam_policy.live_project_policy.policy_data)
   
-  # Target roles to monitor/strip
-  target_roles = ["roles/viewer", "roles/editor"]
+  discovered_user_bindings = flatten([
+    for binding in lookup(local.live_policy_json, "bindings", []) : [
+      for member in lookup(binding, "members", []) : {
+        member = member
+        role   = binding.role
+      } if contains(local.target_members, member)
+    ]
+  ])
 
-  # 2. Sanitize and enforce the "user:" prefix across the parsed array elements
-  member_list = [
-    for m in local.raw_member_list : "user:${replace(m, "user:", "")}"
-  ]
-
-  # 3. Create combinations of all users and all roles
-  # Output looks like: [[user1, viewer], [user1, editor], [user2, viewer]...]
-  user_role_pairs = setproduct(local.member_list, local.target_roles)
-
-  # 4. If offboarding is true, clear the map completely to trigger an automatic DESTROY plan
+  # 4. If is_offboarding is true, this map drops to {}, triggering a clean DESTROY plan.
+  # If false, it dynamically maps only the roles those users ACTUALLY have.
   final_role_map = var.is_offboarding ? {} : {
-    for pair in local.user_role_pairs : "${pair[0]}-${pair[1]}" => {
-      member = pair[0]
-      role   = pair[1]
-    }
+    for idx, item in local.discovered_user_bindings : "${item.member}-${item.role}" => item
   }
 }
 
